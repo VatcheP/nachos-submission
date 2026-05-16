@@ -3,6 +3,7 @@ package nachos.userprog;
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
+import java.util.LinkedList;
 
 /**
  * A kernel that can support multiple user processes.
@@ -11,6 +12,10 @@ public class UserKernel extends ThreadedKernel {
 	/**
 	 * Allocate a new user kernel.
 	 */
+
+
+public static LinkedList<Integer> freePages;
+public static Lock freePagesLock;
 	public UserKernel() {
 		super();
 	}
@@ -19,17 +24,28 @@ public class UserKernel extends ThreadedKernel {
 	 * Initialize this kernel. Creates a synchronized console and sets the
 	 * processor's exception handler.
 	 */
-	public void initialize(String[] args) {
-		super.initialize(args);
 
-		console = new SynchConsole(Machine.console());
 
-		Machine.processor().setExceptionHandler(new Runnable() {
-			public void run() {
-				exceptionHandler();
-			}
-		});
-	}
+public void initialize(String[] args) {
+
+    super.initialize(args);
+freePages = new LinkedList<Integer>();
+freePagesLock = new Lock();
+
+int numPhysPages = Machine.processor().getNumPhysPages();
+
+for (int i = 0; i < numPhysPages; i++) {
+    freePages.add(i);
+}
+
+    console = new SynchConsole(Machine.console());
+
+    Machine.processor().setExceptionHandler(new Runnable() {
+        public void run() {
+            exceptionHandler();
+        }
+    });
+}
 
 	/**
 	 * Test the console device.
