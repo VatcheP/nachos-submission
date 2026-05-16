@@ -710,16 +710,27 @@ private int handleWrite(int fd, int bufferAddr, int count) {
         return -1;
     }
 
+    if (count == 0) {
+        return 0;
+    }
+
     byte[] buffer = new byte[count];
 
     int bytesRead = readVirtualMemory(bufferAddr, buffer);
 
-    if (bytesRead <= 0 && count > 0) {
+    if (bytesRead != count) {
         return -1;
     }
 
-    return fileTable[fd].write(buffer, 0, bytesRead);
+    int bytesWritten = fileTable[fd].write(buffer, 0, count);
+
+    if (bytesWritten < 0) {
+        return -1;
+    }
+
+    return bytesWritten;
 }
+
 
 private int handleExec(int fileAddr, int argc, int argvAddr) {
     if (argc < 0) {
