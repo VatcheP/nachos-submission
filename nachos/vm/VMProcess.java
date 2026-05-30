@@ -131,6 +131,88 @@ public class VMProcess extends UserProcess {
     		pageTable[vpn].dirty = false;
 	}
 
+public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
+    Lib.assertTrue(offset >= 0 && length >= 0 &&
+                   offset + length <= data.length);
+
+    byte[] memory = Machine.processor().getMemory();
+
+    int amount = 0;
+
+    while (length > 0) {
+        int vpn = Processor.pageFromAddress(vaddr);
+        int pageOffset = Processor.offsetFromAddress(vaddr);
+
+        if (vpn < 0 || vpn >= numPages) {
+            break;
+        }
+
+        if (!pageTable[vpn].valid) {
+            handlePageFault(vaddr);
+        }
+
+        if (!pageTable[vpn].valid) {
+            break;
+        }
+
+        int ppn = pageTable[vpn].ppn;
+        int paddr = ppn * pageSize + pageOffset;
+
+        int bytes = Math.min(length, pageSize - pageOffset);
+
+        System.arraycopy(memory, paddr, data, offset, bytes);
+
+        amount += bytes;
+        offset += bytes;
+        vaddr += bytes;
+        length -= bytes;
+    }
+
+    return amount;
+}
+
+public int writeVirtualMemory(int vaddr, byte[] data, int offset, int length) {
+    Lib.assertTrue(offset >= 0 && length >= 0 &&
+                   offset + length <= data.length);
+
+    byte[] memory = Machine.processor().getMemory();
+
+    int amount = 0;
+
+    while (length > 0) {
+        int vpn = Processor.pageFromAddress(vaddr);
+        int pageOffset = Processor.offsetFromAddress(vaddr);
+
+        if (vpn < 0 || vpn >= numPages) {
+            break;
+        }
+
+        if (!pageTable[vpn].valid) {
+            handlePageFault(vaddr);
+        }
+
+        if (!pageTable[vpn].valid || pageTable[vpn].readOnly) {
+            break;
+        }
+
+        int ppn = pageTable[vpn].ppn;
+        int paddr = ppn * pageSize + pageOffset;
+
+        int bytes = Math.min(length, pageSize - pageOffset);
+
+        System.arraycopy(data, offset, memory, paddr, bytes);
+
+        pageTable[vpn].dirty = true;
+
+        amount += bytes;
+        offset += bytes;
+        vaddr += bytes;
+        length -= bytes;
+    }
+
+    return amount;
+}
+
 	private static final int pageSize = Processor.pageSize;
 
 	private static final char dbgProcess = 'a';
