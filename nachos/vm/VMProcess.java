@@ -39,7 +39,13 @@ public class VMProcess extends UserProcess {
 	 * @return <tt>true</tt> if successful.
 	 */
 	protected boolean loadSections() {
-		return super.loadSections();
+ 		pageTable = new TranslationEntry[numPages];
+
+        for (int vpn = 0; vpn < numPages; vpn++) {
+        	pageTable[vpn] = new TranslationEntry(vpn, -1, false, false, false, false);
+    	}
+
+    		return true;
 	}
 
 	/**
@@ -57,13 +63,72 @@ public class VMProcess extends UserProcess {
 	 * @param cause the user exception that occurred.
 	 */
 	public void handleException(int cause) {
-		Processor processor = Machine.processor();
+    	Processor processor = Machine.processor();
 
-		switch (cause) {
-		default:
-			super.handleException(cause);
-			break;
-		}
+    	switch (cause) {
+    	case Processor.exceptionPageFault:
+        	int badVaddr = processor.readRegister(Processor.regBadVAddr);
+        	handlePageFault(badVaddr);
+		break;
+
+    	default:
+        	super.handleException(cause);
+        	break;
+    		}
+	}
+	
+	private void handlePageFault(int vaddr) {
+    	int vpn = Processor.pageFromAddress(vaddr);
+
+    	if (vpn < 0 || vpn >= numPages) {
+        	Lib.debug(dbgVM, "invalid page fault vpn=" + vpn);
+        	return;
+    	}
+
+    	int ppn;
+
+	UserKernel.freePagesLock.acquire();
+	
+	if (UserKernel.freePages.isEmpty()) {
+    		UserKernel.freePagesLock.release();
+    		Lib.assertTrue(false);
+    		return;
+	}	
+
+	ppn = UserKernel.freePages.removeFirst();
+
+	UserKernel.freePagesLock.release();
+
+    	byte[] memory = Machine.processor().getMemory();
+
+    	// zero-fill by default for stack/args pages
+    	for (int i = 0; i < pageSize; i++) {
+        	memory[ppn * pageSize + i] = 0;
+    	}
+
+    	boolean loadedFromCoff = false;
+
+    	for (int s = 0; s < coff.getNumSections(); s++) {
+        	CoffSection section = coff.getSection(s);
+
+        int firstVPN = section.getFirstVPN();
+        int length = section.getLength();
+
+        if (vpn >= firstVPN && vpn < firstVPN + length) {
+            	section.loadPage(vpn - firstVPN, ppn);
+            	
+		pageTable[vpn].readOnly = section.isReadOnly();
+            	
+		loadedFromCoff = true;
+            	
+		break;
+        	}
+    	}
+
+    		pageTable[vpn].ppn = ppn;
+    		pageTable[vpn].valid = true;
+    		pageTable[vpn].used = false;
+    		pageTable[vpn].dirty = false;
 	}
 
 	private static final int pageSize = Processor.pageSize;
